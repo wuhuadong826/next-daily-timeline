@@ -1,8 +1,8 @@
 import type { ScheduleData, TimeBlock } from "./schedule";
 
 export interface ScheduleRepository {
-  getAll(): ScheduleData;
-  saveAll(data: ScheduleData): void;
+  getAll(): Promise<ScheduleData>;
+  saveAll(data: ScheduleData): Promise<void>;
 }
 
 const STORAGE_KEY = "daily-timeline:schedule:v1";
@@ -24,15 +24,33 @@ export function parseScheduleData(value: unknown): ScheduleData {
 }
 
 class LocalStorageScheduleRepository implements ScheduleRepository {
-  getAll(): ScheduleData {
+  async getAll(): Promise<ScheduleData> {
     if (typeof window === "undefined") return EMPTY_DATA;
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return EMPTY_DATA;
-    try { return parseScheduleData(JSON.parse(raw)); } catch { return EMPTY_DATA; }
+    let cached = EMPTY_DATA;
+    try { cached = raw ? parseScheduleData(JSON.parse(raw)) : EMPTY_DATA; } catch {}
+    try {
+      const response = await fetch("/api/schedule", { cache: "no-store" });
+      if (!response.ok) throw new Error("cloud unavailable");
+      const payload = (await response.json()) as { schedule: unknown | null };
+      if (payload.schedule) {
+        const cloud = parseScheduleData(payload.schedule);
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cloud));
+        return cloud;
+      }
+      if (cached.blocks.length) await this.saveAll(cached);
+    } catch {}
+    return cached;
   }
 
-  saveAll(data: ScheduleData): void {
+  async saveAll(data: ScheduleData): Promise<void> {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    const response = await fetch("/api/schedule", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error("云端保存失败");
   }
 }
 

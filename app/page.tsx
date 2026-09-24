@@ -55,8 +55,7 @@ export default function Home() {
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setData(scheduleRepository.getAll());
-    setHydrated(true);
+    scheduleRepository.getAll().then(setData).finally(() => setHydrated(true));
     const timer = window.setInterval(() => setNow(new Date()), 15_000);
     return () => window.clearInterval(timer);
   }, []);
@@ -90,7 +89,7 @@ export default function Home() {
           additionalProperties: false,
         },
         annotations: { readOnlyHint: false, untrustedContentHint: false },
-        execute: (input) => {
+        execute: async (input) => {
           const value = input as Partial<Pick<TimeBlockDraft, "title" | "startTime" | "endTime" | "note">>;
           if (typeof value.title !== "string" || typeof value.startTime !== "string" || typeof value.endTime !== "string" || (value.note !== undefined && typeof value.note !== "string")) throw new Error("参数格式无效");
           const nextDraft: TimeBlockDraft = { date: selectedDate, title: value.title, startTime: value.startTime, endTime: value.endTime, note: value.note ?? "" };
@@ -99,7 +98,7 @@ export default function Home() {
           const timestamp = new Date().toISOString();
           const block: TimeBlock = { ...nextDraft, id: crypto.randomUUID(), createdAt: timestamp, updatedAt: timestamp };
           const nextData: ScheduleData = { version: 1, blocks: [...data.blocks, block] };
-          scheduleRepository.saveAll(nextData);
+          await scheduleRepository.saveAll(nextData);
           setData(nextData);
           return { created: true, block };
         },
@@ -116,7 +115,7 @@ export default function Home() {
   const next = dayBlocks.find((block) => timeToMinutes(block.startTime) > (isToday ? nowMinutes : -1));
 
   function commit(nextData: ScheduleData, message?: string) {
-    scheduleRepository.saveAll(nextData);
+    void scheduleRepository.saveAll(nextData).catch(() => setNotice("已保存在本机，云端暂时未同步"));
     setData(nextData);
     if (message) {
       setNotice(message);
