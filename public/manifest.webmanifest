@@ -1,0 +1,10 @@
+{
+  "name": "每日时间轴",
+  "short_name": "时间轴",
+  "description": "高精度规划，低压力执行。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f7f6",
+  "theme_color": "#173f36",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
