@@ -1,8 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { requireChatGPTUser } from "./chatgpt-auth";
-
-export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "每日时间轴",
@@ -13,7 +10,6 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { themeColor: "#173f36", width: "device-width", initialScale: 1 };
 
-export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  await requireChatGPTUser("/");
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return <html lang="zh-CN"><body className="antialiased">{children}</body></html>;
 }

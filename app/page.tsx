@@ -1,11 +1,14 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, CalendarDays, ChevronLeft, ChevronRight, Clock3, Copy, MoreHorizontal, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, CalendarDays, ChevronLeft, ChevronRight, Clock3, Copy, LogOut, MoreHorizontal, Plus, RotateCcw, Trash2 } from "lucide-react";
+import type { Session } from "@supabase/supabase-js";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { PwaRegister } from "@/components/pwa-register";
+import { AuthScreen } from "@/components/auth-screen";
 import { parseScheduleData, scheduleRepository } from "@/lib/schedule-repository";
+import { supabase } from "@/lib/supabase";
 import { addDays, durationLabel, formatCountdown, localDateKey, minutesToTime, nowTime, shiftBlock, sortBlocks, timeToMinutes, validateDraft, type ScheduleData, type TimeBlock, type TimeBlockDraft } from "@/lib/schedule";
 
 const blankDraft = (date: string, now = new Date()): TimeBlockDraft => {
@@ -40,6 +43,7 @@ type WebModelContext = {
 };
 
 export default function Home() {
+  const [session, setSession] = useState<Session | null>();
   const [selectedDate, setSelectedDate] = useState(localDateKey);
   const [data, setData] = useState<ScheduleData>({ version: 1, blocks: [] });
   const [hydrated, setHydrated] = useState(false);
@@ -53,16 +57,31 @@ export default function Home() {
   const [shiftMinutes, setShiftMinutes] = useState<number | null>(null);
   const [shiftFromId, setShiftFromId] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const userId = session?.user.id;
 
   useEffect(() => {
-    scheduleRepository.getAll().then(setData).finally(() => setHydrated(true));
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 15_000);
     return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
+    if (!userId) {
+      setData({ version: 1, blocks: [] });
+      setHydrated(false);
+      return;
+    }
+    scheduleRepository.getAll(userId).then(setData).finally(() => setHydrated(true));
+  }, [userId]);
+
+  useEffect(() => {
     const context = (document as Document & { modelContext?: WebModelContext }).modelContext;
-    if (!context?.registerTool || !hydrated) return;
+    if (!context?.registerTool || !hydrated || !userId) return;
     const lifecycle = new AbortController();
     const register = async () => {
       await context.registerTool({
@@ -98,7 +117,7 @@ export default function Home() {
           const timestamp = new Date().toISOString();
           const block: TimeBlock = { ...nextDraft, id: crypto.randomUUID(), createdAt: timestamp, updatedAt: timestamp };
           const nextData: ScheduleData = { version: 1, blocks: [...data.blocks, block] };
-          await scheduleRepository.saveAll(nextData);
+          await scheduleRepository.saveAll(userId, nextData);
           setData(nextData);
           return { created: true, block };
         },
@@ -106,7 +125,7 @@ export default function Home() {
     };
     void register().catch(() => undefined);
     return () => lifecycle.abort();
-  }, [data.blocks, hydrated, selectedDate]);
+  }, [data.blocks, hydrated, selectedDate, userId]);
 
   const dayBlocks = useMemo(() => sortBlocks(data.blocks.filter((block) => block.date === selectedDate)), [data.blocks, selectedDate]);
   const nowMinutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
@@ -115,7 +134,8 @@ export default function Home() {
   const next = dayBlocks.find((block) => timeToMinutes(block.startTime) > (isToday ? nowMinutes : -1));
 
   function commit(nextData: ScheduleData, message?: string) {
-    void scheduleRepository.saveAll(nextData).catch(() => setNotice("已保存在本机，云端暂时未同步"));
+    if (!userId) return;
+    void scheduleRepository.saveAll(userId, nextData).catch(() => setNotice("已保存在本机，云端暂时未同步"));
     setData(nextData);
     if (message) {
       setNotice(message);
@@ -260,6 +280,9 @@ export default function Home() {
     ? { eyebrow: "现在", title: current.title, detail: `${current.startTime} – ${current.endTime}`, timing: `还剩 ${formatCountdown(timeToMinutes(current.endTime) - nowMinutes)}` }
     : { eyebrow: isToday ? "现在" : getDateLabel(selectedDate), title: isToday ? "当前没有安排" : `${formatDate(selectedDate)}的计划`, detail: next ? `下一项 ${next.startTime} 开始` : "今天暂无日程", timing: next && isToday ? `${formatCountdown(timeToMinutes(next.startTime) - nowMinutes)}后开始` : "" };
 
+  if (session === undefined) return <main className="min-h-screen bg-[#f4f7f6]" />;
+  if (!session) return <AuthScreen />;
+
   return (
     <main className="min-h-screen bg-[#f4f7f6] text-[#17221f]">
       <PwaRegister />
@@ -272,6 +295,7 @@ export default function Home() {
           <div className="flex items-center gap-1">
             <button className="icon-button" onClick={exportData} aria-label="导出数据"><ArrowDownToLine size={18} /></button>
             <button className="icon-button" onClick={() => importRef.current?.click()} aria-label="导入数据"><ArrowUpFromLine size={18} /></button>
+            <button className="icon-button" onClick={() => void supabase.auth.signOut()} aria-label="退出登录"><LogOut size={18} /></button>
             <input ref={importRef} type="file" accept="application/json" className="hidden" onChange={importData} />
           </div>
         </header>

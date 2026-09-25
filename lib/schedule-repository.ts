@@ -1,11 +1,12 @@
 import type { ScheduleData, TimeBlock } from "./schedule";
+import { supabase } from "./supabase";
 
 export interface ScheduleRepository {
-  getAll(): Promise<ScheduleData>;
-  saveAll(data: ScheduleData): Promise<void>;
+  getAll(userId: string): Promise<ScheduleData>;
+  saveAll(userId: string, data: ScheduleData): Promise<void>;
 }
 
-const STORAGE_KEY = "daily-timeline:schedule:v1";
+const storageKey = (userId: string) => `daily-timeline:schedule:v1:${userId}`;
 const EMPTY_DATA: ScheduleData = { version: 1, blocks: [] };
 
 function isTimeBlock(value: unknown): value is TimeBlock {
@@ -24,33 +25,29 @@ export function parseScheduleData(value: unknown): ScheduleData {
 }
 
 class LocalStorageScheduleRepository implements ScheduleRepository {
-  async getAll(): Promise<ScheduleData> {
+  async getAll(userId: string): Promise<ScheduleData> {
     if (typeof window === "undefined") return EMPTY_DATA;
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const key = storageKey(userId);
+    const raw = window.localStorage.getItem(key);
     let cached = EMPTY_DATA;
     try { cached = raw ? parseScheduleData(JSON.parse(raw)) : EMPTY_DATA; } catch {}
     try {
-      const response = await fetch("/api/schedule", { cache: "no-store" });
-      if (!response.ok) throw new Error("cloud unavailable");
-      const payload = (await response.json()) as { schedule: unknown | null };
-      if (payload.schedule) {
-        const cloud = parseScheduleData(payload.schedule);
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cloud));
+      const { data: row, error } = await supabase.from("schedules").select("data").eq("user_id", userId).maybeSingle();
+      if (error) throw error;
+      if (row?.data) {
+        const cloud = parseScheduleData(row.data);
+        window.localStorage.setItem(key, JSON.stringify(cloud));
         return cloud;
       }
-      if (cached.blocks.length) await this.saveAll(cached);
+      if (cached.blocks.length) await this.saveAll(userId, cached);
     } catch {}
     return cached;
   }
 
-  async saveAll(data: ScheduleData): Promise<void> {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    const response = await fetch("/api/schedule", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error("云端保存失败");
+  async saveAll(userId: string, data: ScheduleData): Promise<void> {
+    window.localStorage.setItem(storageKey(userId), JSON.stringify(data));
+    const { error } = await supabase.from("schedules").upsert({ user_id: userId, data, updated_at: new Date().toISOString() });
+    if (error) throw error;
   }
 }
 
