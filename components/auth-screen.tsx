@@ -26,7 +26,7 @@ export function AuthScreen() {
     setBusy(false);
     if (result.error) {
       setMessage(result.error.message.includes("Database error")
-        ? "邀请码无效、已使用，或注册信息有误"
+        ? "邀请码无效、已停用、已达到使用上限，或注册信息有误"
         : result.error.message);
       return;
     }

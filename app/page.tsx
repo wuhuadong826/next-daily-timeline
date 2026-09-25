@@ -7,6 +7,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { PwaRegister } from "@/components/pwa-register";
 import { AuthScreen } from "@/components/auth-screen";
+import { InviteManager } from "@/components/invite-manager";
 import { parseScheduleData, scheduleRepository } from "@/lib/schedule-repository";
 import { supabase } from "@/lib/supabase";
 import { addDays, durationLabel, formatCountdown, localDateKey, minutesToTime, nowTime, shiftBlock, sortBlocks, timeToMinutes, validateDraft, type ScheduleData, type TimeBlock, type TimeBlockDraft } from "@/lib/schedule";
@@ -293,6 +294,7 @@ export default function Home() {
             <div><p className="text-[13px] font-medium text-[#6a7773]">每日时间轴</p><h1 className="text-lg font-semibold tracking-tight">{formatDate(selectedDate)}</h1></div>
           </div>
           <div className="flex items-center gap-1">
+            <InviteManager />
             <button className="icon-button" onClick={exportData} aria-label="导出数据"><ArrowDownToLine size={18} /></button>
             <button className="icon-button" onClick={() => importRef.current?.click()} aria-label="导入数据"><ArrowUpFromLine size={18} /></button>
             <button className="icon-button" onClick={() => void supabase.auth.signOut()} aria-label="退出登录"><LogOut size={18} /></button>
